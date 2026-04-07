@@ -1,225 +1,129 @@
-name: CI Pipeline - RemindMe App
+name: CI/CD Pipeline - RemindMe
 
 on:
   push:
-    branches:
-      - develop
-      - 'feature/**'
-      - 'hotfix/**'
+    branches: [ main, master, develop, 'feature/**', 'hotfix/**' ]
   pull_request:
-    branches:
-      - master
-      - develop
+    branches: [ main, master, develop ]
 
 jobs:
-  # ============================================================
-  # JOB 1: SYNTAX CHECK (PHP Lint)
-  # Memastikan tidak ada syntax error di semua file PHP
-  # ============================================================
-  php-syntax-check:
-    name: "PHP Syntax Check"
+  # Job 1: Testing & Quality Check
+  test:
+    name: Run PHPUnit Tests
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout kode
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
-
-      - name: Cek syntax semua file PHP
+          php-version: '8.2'
+          extensions: pdo, sqlite, pdo_sqlite
+          tools: composer, phpunit
+      
+      - name: Install dependencies
         run: |
-          echo "=== Memulai PHP Lint Check ==="
-          find . -name "*.php" -not -path "./vendor/*" | while read file; do
-            php -l "$file"
-            if [ $? -ne 0 ]; then
-              echo "GAGAL: Syntax error di $file"
-              exit 1
-            fi
-          done
-          echo "=== Semua file PHP lolos syntax check ==="
+          composer install --no-progress --no-suggest
+      
+      - name: Create SQLite database for testing
+        run: |
+          touch database.sqlite
+          chmod 666 database.sqlite
+      
+      - name: Run PHPUnit tests
+        run: |
+          ./vendor/bin/phpunit --configuration phpunit.xml
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
 
-  # ============================================================
-  # JOB 2: CODING STANDARD CHECK
-  # Memastikan kode mengikuti standar PSR-12
-  # ============================================================
-  coding-standard:
-    name: "Coding Standard (PSR-12)"
+  # Job 2: Code Quality Check (Syntax & Lint)
+  lint:
+    name: PHP Syntax Check
     runs-on: ubuntu-latest
-    needs: php-syntax-check
-
+    
     steps:
-      - name: Checkout kode
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
-          tools: phpcs
-
-      - name: Install PHP CodeSniffer
-        run: composer global require "squizlabs/php_codesniffer=*"
-
-      - name: Jalankan PHPCS (PSR-12 Standard)
+          php-version: '8.2'
+          tools: composer
+      
+      - name: Check PHP syntax errors
         run: |
-          echo "=== Cek Coding Standard PSR-12 ==="
-          ~/.composer/vendor/bin/phpcs \
-            --standard=PSR12 \
-            --extensions=php \
-            --ignore=vendor/ \
-            --report=full \
-            . || true
-          echo "=== Coding standard check selesai ==="
+          find . -name "*.php" ! -path "./vendor/*" -exec php -l {} \;
+      
+      - name: Install PHP_CodeSniffer
+        run: |
+          composer require --dev squizlabs/php_codesniffer
+      
+      - name: Run Code Sniffer (PSR-12 Standard)
+        run: |
+          ./vendor/bin/phpcs --standard=PSR12 --extensions=php --ignore=vendor/ .
 
-  # ============================================================
-  # JOB 3: SECURITY CHECK
-  # Mencari celah keamanan umum di kode PHP
-  # ============================================================
-  security-check:
-    name: "Security Vulnerability Check"
+  # Job 3: Security Check
+  security:
+    name: Security Vulnerability Scan
     runs-on: ubuntu-latest
-    needs: php-syntax-check
-
+    
     steps:
-      - name: Checkout kode
+      - name: Checkout code
         uses: actions/checkout@v4
-
+      
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
-
-      - name: Cek file sensitif tidak ter-commit
+          php-version: '8.2'
+      
+      - name: Run Security Checker
         run: |
-          echo "=== Cek file sensitif ==="
-          # Pastikan .env atau file password tidak masuk repo
-          if find . -name ".env" -not -path "./.git/*" | grep -q ".env"; then
-            echo "WARNING: File .env ditemukan di repo!"
-          else
-            echo "OK: Tidak ada file .env sensitif"
-          fi
+          composer require --dev roave/security-advisories:dev-latest
 
-      - name: Cek penggunaan fungsi berbahaya
-        run: |
-          echo "=== Cek fungsi PHP berbahaya ==="
-          DANGEROUS_FUNCTIONS="eval\|exec\|shell_exec\|passthru\|system\|base64_decode"
-          RESULT=$(grep -rn "$DANGEROUS_FUNCTIONS" --include="*.php" . | grep -v ".git" || true)
-          if [ -n "$RESULT" ]; then
-            echo "WARNING: Fungsi berbahaya ditemukan:"
-            echo "$RESULT"
-          else
-            echo "OK: Tidak ada fungsi berbahaya"
-          fi
-
-      - name: Cek SQL Injection sederhana
-        run: |
-          echo "=== Cek potensi SQL Injection ==="
-          # Cek apakah ada query yang tidak pakai prepared statement
-          RESULT=$(grep -rn "query.*\$_" --include="*.php" . | grep -v ".git" | grep -v "prepare" || true)
-          if [ -n "$RESULT" ]; then
-            echo "WARNING: Potensi raw query ditemukan, pastikan pakai prepared statement:"
-            echo "$RESULT"
-          else
-            echo "OK: Tidak ada indikasi SQL injection"
-          fi
-
-  # ============================================================
-  # JOB 4: FUNCTIONAL TEST
-  # Test koneksi database dan fungsi utama aplikasi
-  # ============================================================
-  functional-test:
-    name: "Functional Test"
+  # Job 4: Build & Package (Simulasi)
+  build:
+    name: Build & Package
     runs-on: ubuntu-latest
-    needs: [coding-standard, security-check]
-
+    needs: [test, lint, security]
+    
     steps:
-      - name: Checkout kode
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup PHP dengan ekstensi SQLite
-        uses: shivammathur/setup-php@v2
+      
+      - name: Create build artifact
+        run: |
+          mkdir -p build/remindme
+          cp -r *.php build/remindme/
+          cp -r database.sqlite build/remindme/ 2>/dev/null || true
+          zip -r remindme-build.zip build/
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
-          php-version: '8.1'
-          extensions: pdo, pdo_sqlite
+          name: remindme-build
+          path: remindme-build.zip
 
-      - name: Test koneksi database SQLite
-        run: |
-          echo "=== Test Koneksi Database ==="
-          php -r "
-            try {
-              \$pdo = new PDO('sqlite::memory:');
-              \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-              echo 'OK: Koneksi SQLite berhasil' . PHP_EOL;
-
-              // Buat tabel test
-              \$pdo->exec('CREATE TABLE test_user (id INTEGER PRIMARY KEY, nama TEXT)');
-              \$pdo->exec(\"INSERT INTO test_user (nama) VALUES ('TestUser')\");
-              \$row = \$pdo->query('SELECT * FROM test_user')->fetch();
-              
-              if (\$row['nama'] === 'TestUser') {
-                echo 'OK: Insert dan Select berhasil' . PHP_EOL;
-              } else {
-                echo 'GAGAL: Data tidak sesuai' . PHP_EOL;
-                exit(1);
-              }
-
-              echo 'OK: Semua test database lulus' . PHP_EOL;
-            } catch (Exception \$e) {
-              echo 'GAGAL: ' . \$e->getMessage() . PHP_EOL;
-              exit(1);
-            }
-          "
-
-      - name: Test fungsi password hashing
-        run: |
-          echo "=== Test Password Security ==="
-          php -r "
-            \$password = 'password123';
-            \$hash = password_hash(\$password, PASSWORD_DEFAULT);
-            if (password_verify(\$password, \$hash)) {
-              echo 'OK: Password hashing berfungsi dengan benar' . PHP_EOL;
-            } else {
-              echo 'GAGAL: Password hashing tidak berfungsi' . PHP_EOL;
-              exit(1);
-            }
-          "
-
-      - name: Test struktur file aplikasi
-        run: |
-          echo "=== Test Struktur File ==="
-          FILES=("config.php" "index.php" "login.php" "logout.php" "register.php" "tugas.php" "tambah_tugas.php" "mahasiswa.php" "matakuliah.php" "layout.php")
-          for file in "${FILES[@]}"; do
-            if [ -f "$file" ]; then
-              echo "OK: $file ditemukan"
-            else
-              echo "GAGAL: $file TIDAK ditemukan!"
-              exit 1
-            fi
-          done
-
-  # ============================================================
-  # JOB 5: SUMMARY (Laporan Akhir Pipeline)
-  # ============================================================
-  pipeline-summary:
-    name: "Pipeline Summary"
+  # Job 5: Notification (Success/Failed)
+  notify:
+    name: Notify Status
     runs-on: ubuntu-latest
-    needs: [functional-test]
+    needs: [build]
     if: always()
-
+    
     steps:
-      - name: Tampilkan hasil pipeline
+      - name: Check status
         run: |
-          echo "============================================"
-          echo "   REMINDME CI PIPELINE - HASIL AKHIR"
-          echo "============================================"
-          echo "Branch  : ${{ github.ref_name }}"
-          echo "Trigger : ${{ github.event_name }}"
-          echo "Commit  : ${{ github.sha }}"
-          echo "Author  : ${{ github.actor }}"
-          echo "============================================"
-          echo "Semua tahap CI telah selesai dijalankan."
-          echo "Silakan review hasil di atas sebelum merge."
-          echo "============================================"
+          if [ "${{ needs.build.result }}" == "success" ]; then
+            echo "✅ CI/CD Pipeline SUCCESS!"
+          else
+            echo "❌ CI/CD Pipeline FAILED!"
+            exit 1
+          fi

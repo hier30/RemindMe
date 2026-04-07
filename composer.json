@@ -1,0 +1,11 @@
+{
+    "name": "remindme/task-manager",
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "files": [
+            "config.php"
+        ]
+    }
+}
