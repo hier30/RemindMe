@@ -153,7 +153,7 @@ renderSidebar('index.php');
                         <td colspan="4" class="px-6 py-12 text-center">
                             <div class="flex flex-col items-center justify-center text-slate-400">
                                 <i class="ph ph-smiley text-4xl mb-2"></i>
-                                <p>Tidak ada tugas yang mendesak. Aman!</p>
+                                <p>Tidak ada tugas yang deadline. Aman!</p>
                             </div>
                         </td>
                     </tr>
