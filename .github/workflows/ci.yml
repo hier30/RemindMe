@@ -2,9 +2,9 @@ name: CI/CD Pipeline - RemindMe
 
 on:
   push:
-    branches: [ main, master, develop, 'feature/**', 'hotfix/**' ]
+    branches: [ main, master, develop, 'feature/**' ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main, master ]
 
 jobs:
   # Job 1: Testing & Quality Check
@@ -127,3 +127,8 @@ jobs:
             echo "❌ CI/CD Pipeline FAILED!"
             exit 1
           fi
+
+      - name: Run PHPUnit tests
+        run: |
+          ./vendor/bin/phpunit --configuration phpunit.xml --no-coverage
+        continue-on-error: false
