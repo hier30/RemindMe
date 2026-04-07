@@ -1,0 +1,52 @@
+name: CI - PHP Automation Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer, phpcs
+
+      # 1. Cek syntax error di semua file PHP
+      - name: PHP Syntax Check
+        run: |
+          find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+
+      # 2. (Opsional) Cek standar koding PSR-12
+      - name: PHP CodeSniffer (PSR-12)
+        run: |
+          phpcs --standard=PSR12 --extensions=php --report=summary --ignore=vendor/* .
+
+      # 3. Cek fungsi berbahaya (eval, exec, system) - keamanan dasar
+      - name: Security Check
+        run: |
+          if grep -r "eval(" --include="*.php" --exclude-dir=vendor .; then
+            echo "❌ eval() ditemukan - tidak aman"
+            exit 1
+          fi
+          if grep -r "exec(" --include="*.php" --exclude-dir=vendor .; then
+            echo "⚠️ Peringatan: exec() digunakan"
+          fi
+          if grep -r "system(" --include="*.php" --exclude-dir=vendor .; then
+            echo "⚠️ Peringatan: system() digunakan"
+          fi
+
+      # 4. Pastikan file konfigurasi penting ada (opsional)
+      - name: Check Required Files
+        run: |
+          test -f config.php || exit 1
+          test -f index.php || exit 1
+          echo "✅ Semua file penting tersedia"
