@@ -130,75 +130,75 @@ jobs:
   # JOB 4: FUNCTIONAL TEST
   # Test koneksi database dan fungsi utama aplikasi
   # ============================================================
-  # functional-test:
-  #   name: "Functional Test"
-  #   runs-on: ubuntu-latest
-  #   needs: [coding-standard, security-check]
+  functional-test:
+    name: "Functional Test"
+    runs-on: ubuntu-latest
+    needs: [coding-standard, security-check]
 
-  #   steps:
-  #     - name: Checkout kode
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
 
-  #     - name: Setup PHP dengan ekstensi SQLite
-  #       uses: shivammathur/setup-php@v2
-  #       with:
-  #         php-version: '8.1'
-  #         extensions: pdo, pdo_sqlite
+      - name: Setup PHP dengan ekstensi SQLite
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: pdo, pdo_sqlite
 
-  #     - name: Test koneksi database SQLite
-  #       run: |
-  #         echo "=== Test Koneksi Database ==="
-  #         php -r "
-  #           try {
-  #             \$pdo = new PDO('sqlite::memory:');
-  #             \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-  #             echo 'OK: Koneksi SQLite berhasil' . PHP_EOL;
+      - name: Test koneksi database SQLite
+        run: |
+          echo "=== Test Koneksi Database ==="
+          php -r "
+            try {
+              \$pdo = new PDO('sqlite::memory:');
+              \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+              echo 'OK: Koneksi SQLite berhasil' . PHP_EOL;
 
-  #             // Buat tabel test
-  #             \$pdo->exec('CREATE TABLE test_user (id INTEGER PRIMARY KEY, nama TEXT)');
-  #             \$pdo->exec(\"INSERT INTO test_user (nama) VALUES ('TestUser')\");
-  #             \$row = \$pdo->query('SELECT * FROM test_user')->fetch();
+              // Buat tabel test
+              \$pdo->exec('CREATE TABLE test_user (id INTEGER PRIMARY KEY, nama TEXT)');
+              \$pdo->exec(\"INSERT INTO test_user (nama) VALUES ('TestUser')\");
+              \$row = \$pdo->query('SELECT * FROM test_user')->fetch();
               
-  #             if (\$row['nama'] === 'TestUser') {
-  #               echo 'OK: Insert dan Select berhasil' . PHP_EOL;
-  #             } else {
-  #               echo 'GAGAL: Data tidak sesuai' . PHP_EOL;
-  #               exit(1);
-  #             }
+              if (\$row['nama'] === 'TestUser') {
+                echo 'OK: Insert dan Select berhasil' . PHP_EOL;
+              } else {
+                echo 'GAGAL: Data tidak sesuai' . PHP_EOL;
+                exit(1);
+              }
 
-  #             echo 'OK: Semua test database lulus' . PHP_EOL;
-  #           } catch (Exception \$e) {
-  #             echo 'GAGAL: ' . \$e->getMessage() . PHP_EOL;
-  #             exit(1);
-  #           }
-  #         "
+              echo 'OK: Semua test database lulus' . PHP_EOL;
+            } catch (Exception \$e) {
+              echo 'GAGAL: ' . \$e->getMessage() . PHP_EOL;
+              exit(1);
+            }
+          "
 
-  #     - name: Test fungsi password hashing
-  #       run: |
-  #         echo "=== Test Password Security ==="
-  #         php -r "
-  #           \$password = 'password123';
-  #           \$hash = password_hash(\$password, PASSWORD_DEFAULT);
-  #           if (password_verify(\$password, \$hash)) {
-  #             echo 'OK: Password hashing berfungsi dengan benar' . PHP_EOL;
-  #           } else {
-  #             echo 'GAGAL: Password hashing tidak berfungsi' . PHP_EOL;
-  #             exit(1);
-  #           }
-  #         "
+      - name: Test fungsi password hashing
+        run: |
+          echo "=== Test Password Security ==="
+          php -r "
+            \$password = 'password123';
+            \$hash = password_hash(\$password, PASSWORD_DEFAULT);
+            if (password_verify(\$password, \$hash)) {
+              echo 'OK: Password hashing berfungsi dengan benar' . PHP_EOL;
+            } else {
+              echo 'GAGAL: Password hashing tidak berfungsi' . PHP_EOL;
+              exit(1);
+            }
+          "
 
-  #     - name: Test struktur file aplikasi
-  #       run: |
-  #         echo "=== Test Struktur File ==="
-  #         FILES=("config.php" "index.php" "login.php" "logout.php" "register.php" "tugas.php" "tambah_tugas.php" "mahasiswa.php" "matakuliah.php" "layout.php")
-  #         for file in "${FILES[@]}"; do
-  #           if [ -f "$file" ]; then
-  #             echo "OK: $file ditemukan"
-  #           else
-  #             echo "GAGAL: $file TIDAK ditemukan!"
-  #             exit 1
-  #           fi
-  #         done
+      - name: Test struktur file aplikasi
+        run: |
+          echo "=== Test Struktur File ==="
+          FILES=("config.php" "index.php" "login.php" "logout.php" "register.php" "tugas.php" "tambah_tugas.php" "mahasiswa.php" "matakuliah.php" "layout.php")
+          for file in "${FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "OK: $file ditemukan"
+            else
+              echo "GAGAL: $file TIDAK ditemukan!"
+              exit 1
+            fi
+          done
 
   # ============================================================
   # JOB 5: SUMMARY (Laporan Akhir Pipeline)
