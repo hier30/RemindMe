@@ -48,7 +48,7 @@ renderSidebar('tugas.php');
                    class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none shadow-sm">
         </form>
         <a href="tambah_tugas.php" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-all whitespace-nowrap">
-            <i class="ph ph-plus-circle text-lg"></i> Tambah Tugas
+            <i class="ph ph-plus-circle text-lg"></i> Tambah Tugas Saya
         </a>
     </div>
 </div>

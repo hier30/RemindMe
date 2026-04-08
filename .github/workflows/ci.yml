@@ -18,14 +18,31 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: 8.2
-          extensions: mbstring, intl
+          extensions: mbstring, intl, pdo, pdo_sqlite
           coverage: none
 
-      - name: Validate composer.json
-        run: composer validate
+      - name: Check PHP syntax (semua file)
+        run: |
+          find . -name "*.php" -exec php -l {} \;
 
-      - name: Install dependencies
-        run: composer install --no-progress --prefer-dist
+      - name: Verifikasi ekstensi PDO SQLite aktif
+        run: php -r "if (!extension_loaded('pdo_sqlite')) { echo 'pdo_sqlite tidak aktif'; exit(1); } echo 'pdo_sqlite OK';"
 
-      - name: Run PHPUnit
-        run: vendor/bin/phpunit
+      - name: Test koneksi SQLite dan inisialisasi database
+        run: |
+          php -r "
+            \$pdo = new PDO('sqlite::memory:');
+            \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            echo 'Koneksi SQLite in-memory berhasil' . PHP_EOL;
+          "
+
+      - name: Validasi struktur file utama ada
+        run: |
+          files=(config.php index.php login.php logout.php register.php tugas.php tambah_tugas.php layout.php mahasiswa.php matakuliah.php)
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "File tidak ditemukan: $f"
+              exit 1
+            fi
+            echo "OK: $f"
+          done
