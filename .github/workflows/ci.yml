@@ -2,26 +2,94 @@ name: CI - PHP Automation Test
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]  # ← trigger di kedua branch
 
 jobs:
-  test:
+
+  # ──────────────────────────────────────────
+  # JOB 1: Cek syntax & coding standard
+  # ──────────────────────────────────────────
+  lint:
+    name: 🔍 PHP Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+
       - name: PHP Syntax Check
         run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
-      - name: Security Check (no eval)
+
+      - name: Check Core Files Exist
+        run: |
+          for file in config.php index.php layout.php login.php logout.php; do
+            if [ ! -f "$file" ]; then
+              echo "❌ File tidak ditemukan: $file"
+              exit 1
+            else
+              echo "✅ $file ditemukan"
+            fi
+          done
+
+  # ──────────────────────────────────────────
+  # JOB 2: Security scan (butuh job 1 lulus)
+  # ──────────────────────────────────────────
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: lint  # ← hanya jalan jika lint lulus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check no eval()
         run: |
           if grep -r "eval(" --include="*.php" --exclude-dir=vendor .; then
-            echo "❌ eval() ditemukan" && exit 1
+            echo "❌ eval() ditemukan - tidak diizinkan!" && exit 1
+          else
+            echo "✅ Tidak ada eval()"
           fi
-      - name: Check Core Files
+
+      - name: Check no shell_exec / system()
         run: |
-          for file in config.php index.php layout.php login.php; do
-            test -f "$file" || (echo "Missing $file" && exit 1)
-          done
+          if grep -rE "shell_exec|system\(|passthru|exec\(" --include="*.php" --exclude-dir=vendor .; then
+            echo "❌ Fungsi berbahaya ditemukan!" && exit 1
+          else
+            echo "✅ Tidak ada fungsi shell berbahaya"
+          fi
+
+      - name: Check no hardcoded credentials
+        run: |
+          if grep -rE "password\s*=\s*['\"][^'\"]{4,}" --include="*.php" --exclude-dir=vendor . | grep -v "config.php"; then
+            echo "⚠️  Kemungkinan hardcoded password di luar config.php"
+          else
+            echo "✅ Tidak ada hardcoded credentials mencurigakan"
+          fi
+
+  # ──────────────────────────────────────────
+  # JOB 3: Unit Test (butuh job 1 & 2 lulus)
+  # ──────────────────────────────────────────
+  test:
+    name: 🧪 Unit Test
+    runs-on: ubuntu-latest
+    needs: [lint, security]  # ← hanya jalan jika keduanya lulus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP + SQLite
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_sqlite
+          coverage: none
+
+      - name: Install PHPUnit
+        run: |
+          composer require --dev phpunit/phpunit ^10 --no-interaction --no-progress
+
+      - name: Run Unit Tests
+        run: ./vendor/bin/phpunit tests/ --testdox
