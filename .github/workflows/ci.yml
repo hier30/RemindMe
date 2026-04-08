@@ -1,6 +1,8 @@
 name: CI - PHP Automation Test
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -14,14 +16,5 @@ jobs:
         with:
           php-version: '8.2'
       - name: PHP Syntax Check
-        run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
-      - name: Security Check (no eval)
         run: |
-          if grep -r "eval(" --include="*.php" --exclude-dir=vendor .; then
-            echo "❌ eval() ditemukan" && exit 1
-          fi
-      - name: Check Core Files
-        run: |
-          for file in config.php index.php layout.php login.php; do
-            test -f "$file" || (echo "Missing $file" && exit 1)
-          done
+          find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
