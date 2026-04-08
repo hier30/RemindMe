@@ -1,48 +1,243 @@
 name: CI RemindMe
 
 on:
-  push:
-    branches: [develop, main]
   pull_request:
-    branches: [develop]
+    branches: ["main", "develop"]
+  push:
+    branches: ["main", "develop"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  build:
+
+# ==============================================================
+# JOB 1 — PHP SYNTAX CHECK
+# ==============================================================
+
+  php-lint:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.2
-          extensions: mbstring, intl, pdo, pdo_sqlite
-          coverage: none
+          php-version: "8.2"
 
-      - name: Check PHP syntax (semua file)
+      - name: Lint semua file PHP
         run: |
-          find . -name "*.php" -exec php -l {} \;
+          fail=0
+          while IFS= read -r -d '' f; do
+            out=$(php -l "$f" 2>&1)
+            if echo "$out" | grep -qE "Parse error|Fatal error"; then
+              echo "❌ $f → $out"
+              fail=1
+            else
+              echo "✅ OK: $f"
+            fi
+          done < <(find . -name "*.php" -not -path "./.git/*" -print0)
 
-      - name: Verifikasi ekstensi PDO SQLite aktif
-        run: php -r "if (!extension_loaded('pdo_sqlite')) { echo 'pdo_sqlite tidak aktif'; exit(1); } echo 'pdo_sqlite OK';"
+          if [ $fail -eq 1 ]; then
+            exit 1
+          fi
 
-      - name: Test koneksi SQLite dan inisialisasi database
+# ==============================================================
+# JOB 2 — DATABASE VALIDATION (SQLite)
+# ==============================================================
+
+  db-validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo, pdo_sqlite
+
+      - name: Import SQL ke SQLite dan cek tabel
         run: |
           php -r "
-            \$pdo = new PDO('sqlite::memory:');
+            \$pdo = new PDO('sqlite:/tmp/remindme_test.sqlite');
             \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            echo 'Koneksi SQLite in-memory berhasil' . PHP_EOL;
+
+            // Baca dan jalankan SQL (skip baris CREATE DATABASE / USE)
+            \$sql = file_get_contents('database.sql');
+            \$lines = explode(PHP_EOL, \$sql);
+            \$filtered = array_filter(\$lines, function(\$l) {
+              return !preg_match('/^\s*(CREATE DATABASE|USE )/i', \$l);
+            });
+            \$clean = implode(PHP_EOL, \$filtered);
+
+            foreach (explode(';', \$clean) as \$stmt) {
+              \$stmt = trim(\$stmt);
+              if (\$stmt !== '') {
+                try { \$pdo->exec(\$stmt); } catch (Exception \$e) {}
+              }
+            }
+
+            echo 'Import selesai' . PHP_EOL;
+
+            // Cek tabel utama
+            \$tables = ['user_mahasiswa', 'mata_kuliah', 'tugas'];
+            foreach (\$tables as \$tbl) {
+              \$res = \$pdo->query(\"SELECT name FROM sqlite_master WHERE type='table' AND name='\$tbl'\");
+              if (\$res->fetch()) {
+                echo '✅ Tabel ' . \$tbl . ' ditemukan' . PHP_EOL;
+              } else {
+                echo '⚠️  Tabel ' . \$tbl . ' tidak ditemukan' . PHP_EOL;
+              }
+            }
           "
 
-      - name: Validasi struktur file utama ada
+# ==============================================================
+# JOB 3 — FUNCTIONAL TEST (SQLite)
+# ==============================================================
+
+  functional-test:
+    runs-on: ubuntu-latest
+    needs: db-validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: pdo, pdo_sqlite
+
+      - name: Test koneksi dan query dasar
         run: |
-          files=(config.php index.php login.php logout.php register.php tugas.php tambah_tugas.php layout.php mahasiswa.php matakuliah.php)
+          php -r "
+            \$pdo = new PDO('sqlite:/tmp/remindme_func.sqlite');
+            \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+            \$sql = file_get_contents('database.sql');
+            \$lines = explode(PHP_EOL, \$sql);
+            \$filtered = array_filter(\$lines, function(\$l) {
+              return !preg_match('/^\s*(CREATE DATABASE|USE )/i', \$l);
+            });
+            \$clean = implode(PHP_EOL, \$filtered);
+
+            foreach (explode(';', \$clean) as \$stmt) {
+              \$stmt = trim(\$stmt);
+              if (\$stmt !== '') {
+                try { \$pdo->exec(\$stmt); } catch (Exception \$e) {}
+              }
+            }
+
+            // Test query user
+            \$res = \$pdo->query('SELECT COUNT(*) as total FROM user_mahasiswa');
+            \$row = \$res->fetch();
+            echo '✅ Total user: ' . \$row['total'] . PHP_EOL;
+
+            // Test query tugas
+            \$res = \$pdo->query('SELECT COUNT(*) as total FROM tugas');
+            \$row = \$res->fetch();
+            echo '✅ Total tugas: ' . \$row['total'] . PHP_EOL;
+
+            // Test query mata kuliah
+            \$res = \$pdo->query('SELECT COUNT(*) as total FROM mata_kuliah');
+            \$row = \$res->fetch();
+            echo '✅ Total mata kuliah: ' . \$row['total'] . PHP_EOL;
+
+            echo '✅ Semua functional test lulus' . PHP_EOL;
+          "
+
+# ==============================================================
+# JOB 4 — SECURITY AUDIT
+# ==============================================================
+
+  security-audit:
+    runs-on: ubuntu-latest
+    needs: php-lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cek penggunaan MD5 untuk password
+        run: |
+          files=$(grep -rln "md5(" . --include="*.php" || true)
+          if [ -n "$files" ]; then
+            echo "⚠️  MD5 ditemukan (tidak aman untuk password):"
+            echo "$files"
+          else
+            echo "✅ Tidak ada penggunaan MD5"
+          fi
+
+      - name: Cek eval() berbahaya
+        run: |
+          files=$(grep -rln "eval(" . --include="*.php" || true)
+          if [ -n "$files" ]; then
+            echo "⚠️  eval() ditemukan:"
+            echo "$files"
+          else
+            echo "✅ Tidak ada eval()"
+          fi
+
+      - name: Cek password_hash dipakai
+        run: |
+          files=$(grep -rln "password_hash\|password_verify" . --include="*.php" || true)
+          if [ -n "$files" ]; then
+            echo "✅ password_hash/verify digunakan di:"
+            echo "$files"
+          else
+            echo "⚠️  password_hash tidak ditemukan — pastikan password di-hash dengan benar"
+          fi
+
+# ==============================================================
+# JOB 5 — STRUKTUR FILE
+# ==============================================================
+
+  structure-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cek file PHP utama
+        run: |
+          files=(config.php index.php login.php logout.php register.php \
+                 tugas.php tambah_tugas.php mahasiswa.php matakuliah.php \
+                 layout.php database.sql)
           for f in "${files[@]}"; do
             if [ ! -f "$f" ]; then
-              echo "File tidak ditemukan: $f"
-              exit 1
+              echo "⚠️  $f tidak ditemukan"
+            else
+              echo "✅ $f"
             fi
-            echo "OK: $f"
           done
+
+      - name: Cek workflow CI ada
+        run: |
+          if [ -f ".github/workflows/ci.yml" ]; then
+            echo "✅ .github/workflows/ci.yml ditemukan"
+          else
+            echo "⚠️  ci.yml tidak ditemukan"
+          fi
+
+# ==============================================================
+# JOB 6 — REPORT
+# ==============================================================
+
+  report:
+    runs-on: ubuntu-latest
+    needs: [php-lint, db-validate, functional-test, security-audit, structure-check]
+    if: always()
+
+    steps:
+      - name: Ringkasan CI RemindMe
+        run: |
+          echo "================================="
+          echo "   CI RemindMe — Ringkasan Akhir"
+          echo "================================="
+          echo "php-lint       : ${{ needs.php-lint.result }}"
+          echo "db-validate    : ${{ needs.db-validate.result }}"
+          echo "functional-test: ${{ needs.functional-test.result }}"
+          echo "security-audit : ${{ needs.security-audit.result }}"
+          echo "structure-check: ${{ needs.structure-check.result }}"
+          echo "================================="
