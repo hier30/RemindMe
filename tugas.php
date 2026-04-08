@@ -59,7 +59,7 @@ renderSidebar('tugas.php');
         <table class="w-full text-sm text-left whitespace-nowrap">
             <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-100 uppercase text-xs tracking-wider">
                 <tr>
-                    <th class="px-6 py-4">Detail Tugas Saya</th>
+                    <th class="px-6 py-4">Detail Tugas</th>
                     <th class="px-6 py-4">Mata Kuliah</th>
                     <th class="px-6 py-4">Prioritas</th>
                     <th class="px-6 py-4">Deadline</th>
