@@ -60,7 +60,7 @@ renderSidebar('mahasiswa.php');
 
 <div class="mb-6">
     <h2 class="text-2xl font-bold text-slate-800">Profil Mahasiswa</h2>
-    <p class="text-slate-500">Kelola informasi akun dan data akademik kamu.</p>
+    <p class="text-slate-500">Kelola informasi akun dan data akademik.</p>
 </div>
 
 <?php if($message): ?>

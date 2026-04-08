@@ -12,7 +12,7 @@ renderSidebar('matakuliah.php');
 <div class="flex items-center justify-between mb-6">
     <div>
         <h2 class="text-2xl font-bold text-slate-800">Master Mata Kuliah</h2>
-        <p class="text-slate-500">Referensi data mata kuliah yang tersedia.</p>
+        <p class="text-slate-500">Referensi mata kuliah yang tersedia.</p>
     </div>
     <button class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-md">
         + Mata Kuliah Baru
