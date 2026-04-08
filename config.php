@@ -3,7 +3,7 @@
 session_start();
 
 // KONFIGURASI DATABASE (Menggunakan SQLite agar langsung jalan tanpa setup XAMPP)
-// Jika ingin pakai MySQL, ubah $driver ke 'mysql' dan isi $host, $dbname, dll.
+// Jika ingin pakai MySQL, ubah $driver ke 'mysql' dan isi $host, $dbname, dan lain-lain
 $driver = 'sqlite'; 
 
 // Untuk MySQL (XAMPP/Laragon)

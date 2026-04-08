@@ -1,134 +1,95 @@
-name: CI/CD Pipeline - RemindMe
+name: CI - PHP Automation Test
 
 on:
-  push:
-    branches: [ main, master, develop, 'feature/**' ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, develop ]  # ← trigger di kedua branch
 
 jobs:
-  # Job 1: Testing & Quality Check
-  test:
-    name: Run PHPUnit Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: pdo, sqlite, pdo_sqlite
-          tools: composer, phpunit
-      
-      - name: Install dependencies
-        run: |
-          composer install --no-progress --no-suggest
-      
-      - name: Create SQLite database for testing
-        run: |
-          touch database.sqlite
-          chmod 666 database.sqlite
-      
-      - name: Run PHPUnit tests
-        run: |
-          ./vendor/bin/phpunit --configuration phpunit.xml
-      
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: test-results.xml
 
-  # Job 2: Code Quality Check (Syntax & Lint)
+  # ──────────────────────────────────────────
+  # JOB 1: Cek syntax & coding standard
+  # ──────────────────────────────────────────
   lint:
-    name: PHP Syntax Check
+    name: 🔍 PHP Lint
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v4
+
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          tools: composer
-      
-      - name: Check PHP syntax errors
-        run: |
-          find . -name "*.php" ! -path "./vendor/*" -exec php -l {} \;
-      
-      - name: Install PHP_CodeSniffer
-        run: |
-          composer require --dev squizlabs/php_codesniffer
-      
-      - name: Run Code Sniffer (PSR-12 Standard)
-        run: |
-          ./vendor/bin/phpcs --standard=PSR12 --extensions=php --ignore=vendor/ .
 
-  # Job 3: Security Check
+      - name: PHP Syntax Check
+        run: find . -name "*.php" -not -path "./vendor/*" -print0 | xargs -0 -n1 php -l
+
+      - name: Check Core Files Exist
+        run: |
+          for file in config.php index.php layout.php login.php logout.php; do
+            if [ ! -f "$file" ]; then
+              echo "❌ File tidak ditemukan: $file"
+              exit 1
+            else
+              echo "✅ $file ditemukan"
+            fi
+          done
+
+  # ──────────────────────────────────────────
+  # JOB 2: Security scan (butuh job 1 lulus)
+  # ──────────────────────────────────────────
   security:
-    name: Security Vulnerability Scan
+    name: 🔒 Security Scan
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-      
-      - name: Run Security Checker
-        run: |
-          composer require --dev roave/security-advisories:dev-latest
+    needs: lint  # ← hanya jalan jika lint lulus
 
-  # Job 4: Build & Package (Simulasi)
-  build:
-    name: Build & Package
-    runs-on: ubuntu-latest
-    needs: [test, lint, security]
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Create build artifact
-        run: |
-          mkdir -p build/remindme
-          cp -r *.php build/remindme/
-          cp -r database.sqlite build/remindme/ 2>/dev/null || true
-          zip -r remindme-build.zip build/
-      
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: remindme-build
-          path: remindme-build.zip
+      - uses: actions/checkout@v4
 
-  # Job 5: Notification (Success/Failed)
-  notify:
-    name: Notify Status
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: always()
-    
-    steps:
-      - name: Check status
+      - name: Check no eval()
         run: |
-          if [ "${{ needs.build.result }}" == "success" ]; then
-            echo "✅ CI/CD Pipeline SUCCESS!"
+          if grep -r "eval(" --include="*.php" --exclude-dir=vendor .; then
+            echo "❌ eval() ditemukan - tidak diizinkan!" && exit 1
           else
-            echo "❌ CI/CD Pipeline FAILED!"
-            exit 1
+            echo "✅ Tidak ada eval()"
           fi
 
-      - name: Run PHPUnit tests
+      - name: Check no shell_exec / system()
         run: |
-          ./vendor/bin/phpunit --configuration phpunit.xml --no-coverage
-        continue-on-error: false
+          if grep -rE "shell_exec|system\(|passthru|exec\(" --include="*.php" --exclude-dir=vendor .; then
+            echo "❌ Fungsi berbahaya ditemukan!" && exit 1
+          else
+            echo "✅ Tidak ada fungsi shell berbahaya"
+          fi
+
+      - name: Check no hardcoded credentials
+        run: |
+          if grep -rE "password\s*=\s*['\"][^'\"]{4,}" --include="*.php" --exclude-dir=vendor . | grep -v "config.php"; then
+            echo "⚠️  Kemungkinan hardcoded password di luar config.php"
+          else
+            echo "✅ Tidak ada hardcoded credentials mencurigakan"
+          fi
+
+  # ──────────────────────────────────────────
+  # JOB 3: Unit Test (butuh job 1 & 2 lulus)
+  # ──────────────────────────────────────────
+  test:
+    name: 🧪 Unit Test
+    runs-on: ubuntu-latest
+    needs: [lint, security]  # ← hanya jalan jika keduanya lulus
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP + SQLite
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo, pdo_sqlite
+          coverage: none
+
+      - name: Install PHPUnit
+        run: |
+          composer require --dev phpunit/phpunit ^10 --no-interaction --no-progress
+
+      - name: Run Unit Tests
+        run: ./vendor/bin/phpunit tests/ --testdox

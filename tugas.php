@@ -36,7 +36,7 @@ renderSidebar('tugas.php');
 
 <div class="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
     <div>
-        <h2 class="text-2xl font-bold text-slate-800">Daftar Tugas Saya</h2>
+        <h2 class="text-2xl font-bold text-slate-800">Daftar Tugas</h2>
         <p class="text-slate-500">Kelola tugas-tugas kuliahmu di sini.</p>
     </div>
     
